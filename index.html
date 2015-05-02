@@ -1,0 +1,295 @@
+<head>
+	<link rel="stylesheet" href="css/bootstrap.min.css">
+	<link rel="stylesheet" href="css/bootstrap-theme.min.css">
+	<script src="js/jquery-2.1.3.min.js"></script>
+	<script src="js/bootstrap.min.js"></script>
+	
+	<script src="js/raphael.2.1.0.min.js"></script>
+	<script src="js/justgage.1.0.1.min.js"></script>
+	
+	<style>
+		#overlay {
+		position:fixed;
+		top:10%;
+		left:75%;
+		width:15%;
+		height:65%;
+		background:#fff;
+		opacity:1;
+		/*background:rgba(255,255,255,0.8); or just this*/
+		z-index:50;
+		color:#fff;
+		}
+		
+		#overlay2 {
+		position:fixed;
+		top:75%;
+		left:20%;
+		width:60%;
+		height:10%;
+		background:#000;
+		opacity:1;
+		/*background:rgba(255,255,255,0.8); or just this*/
+		z-index:50;
+		color:#fff;
+		}
+	</style>
+</head>
+
+<body>
+	<script>
+		//Closed Captioning data.
+		var player;
+		var readyToGo = false; 
+		var ccTrack=new Array();
+		var currentTrack = "";
+		
+		
+		//Charting data.
+		var sentiment;
+		var libertarian;
+		var liberal;
+		var green;
+		var conservative;
+		
+		var tag = document.createElement('script');
+		tag.src = "https://www.youtube.com/iframe_api";
+			
+		var firstScriptTag = document.getElementsByTagName('script')[0];
+		firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+			
+		function videoHandler(){}
+		
+		videoHandler.prototype.executeIndicoCalls = function(string)
+		{
+			$.ajax({ 
+				type: "POST",
+				contentType: "application/x-www-form-urlencoded",
+				url: "https://indico-indico-v1.p.mashape.com/sentiment",
+				data: { data: string },
+				beforeSend: function(xhr){xhr.setRequestHeader('X-Mashape-Key', 'PLACE_YOUR_INDICO_KEY_HERE');},
+				success: function(data){       
+					var output = $.parseJSON(data);
+					sentiment.refresh(parseInt(parseFloat(output.results) * 100));
+				}
+			});
+			
+			$.ajax({ 
+				type: "POST",
+				contentType: "application/x-www-form-urlencoded",
+				url: "https://indico-indico-v1.p.mashape.com/political",
+				data: { data: string },
+				beforeSend: function(xhr){xhr.setRequestHeader('X-Mashape-Key', 'PLACE_YOUR_INDICO_KEY_HERE');},
+				success: function(data){      
+					//Update political graph.
+					var output = $.parseJSON(data);
+					libertarian.refresh(parseInt(parseFloat(output.results.Libertarian) * 100));
+					liberal.refresh(parseInt(parseFloat(output.results.Liberal) * 100));
+					green.refresh(parseInt(parseFloat(output.results.Green) * 100));
+					conservative.refresh(parseInt(parseFloat(output.results.Conservative) * 100));
+				}
+			});
+			
+			$.ajax({ 
+				type: "POST",
+				contentType: "application/x-www-form-urlencoded",
+				url: "https://indico-indico-v1.p.mashape.com/texttags",
+				data: { data: string },
+				beforeSend: function(xhr){xhr.setRequestHeader('X-Mashape-Key', 'PLACE_YOUR_INDICO_KEY_HERE');},
+				success: function(data){        
+					//Select top three tags and display them.
+					//console.log("T: " + string + " T: " + data);
+					var output = $.parseJSON(data);
+					var tags = "<br>Tags: ";
+					$.each(output.results,function(key, value) 
+					{
+						if(parseInt(parseFloat(value)*100)>5)
+							tags += key + " : " + parseInt(parseFloat(value)*100) + "; ";
+					});
+						
+					$("#caption").text("Caption: " + string);
+					$("#caption").append(tags);
+				}
+			});
+		}
+		
+		
+		videoHandler.prototype.beginClosedCaptioning = function()
+		{
+			setInterval(
+				function()
+				{  
+					try {
+						var currTime = parseFloat(player.getCurrentTime());
+						for (var i = 0; i < ccTrack.length; i++) {
+							if(ccTrack[i][0] < currTime && ccTrack[i][1] > currTime)
+							{
+								if(currentTrack != ccTrack[i][2])
+								{
+									currentTrack = ccTrack[i][2];
+									new videoHandler().executeIndicoCalls(currentTrack);
+								}
+								return;
+							}
+						}
+					}
+					catch(err) {
+						console.log("No time");
+					}
+				}, 
+			100);
+		}
+		
+		videoHandler.prototype.initializeGauges = function()
+		{
+			$('#sentiment').empty();
+			sentiment = new JustGage({
+				id: "sentiment",
+				value: 0,
+				min: 0,
+				max: 100,
+				title: "Sentiment"
+			});
+			
+			$('#libertarian').empty();
+			libertarian = new JustGage({
+				id: "libertarian",
+				value: 0,
+				min: 0,
+				max: 100,
+				title: "Libertarian"
+			});
+			
+			$('#liberal').empty();
+			liberal = new JustGage({
+				id: "liberal",
+				value: 0,
+				min: 0,
+				max: 100,
+				title: "Liberal"
+			});
+			
+			$('#green').empty();
+			green = new JustGage({
+				id: "green",
+				value: 0,
+				min: 0,
+				max: 100,
+				title: "Green"
+			});
+			
+			$('#conservative').empty();
+			conservative = new JustGage({
+				id: "conservative",
+				value: 0,
+				min: 0,
+				max: 100,
+				title: "Conservative"
+			});
+		}
+		videoHandler.prototype.execute = function(tar)
+		{
+			$( "#overlay" ).show();
+			$( "#overlay2" ).show();
+			$( "#achieved").hide();
+			new videoHandler().initializeGauges();
+			$('#video-holder').empty();
+			$('#video-holder').append('<iframe id="player" width="'+(window.innerWidth*0.80)+'" height="'+(window.innerHeight*0.80)+'" src="'+tar.replace("watch?v=","/embed/")+'?wmode=transparent&autoplay=true&enablejsapi=1&playerapiid=ytplayer" frameborder="0"></iframe>');
+			player = new YT.Player('player');
+			
+			//TODO Integrate multi-language CC's
+			//TODO Try-Catch for non-CC videos (nothing happens... at all)
+			var split = tar.split("v=")[1];
+			$.ajax({
+				type : "GET",
+				url : "http://video.google.com/timedtext?lang=en&v="+split,
+				success: function(data)
+				{
+					$('text', data).each(function(){
+						var begin = parseFloat($(this).attr("start"));
+						var end = parseFloat($(this).attr("start")) + parseFloat($(this).attr("dur"));
+						var text = $("<div/>").html($(this).text()).text();
+						
+						//Storage
+						var array = new Array();
+						array.push(begin);
+						array.push(end);
+						array.push(text);
+						ccTrack.push(array);
+					});
+					readyToGo = true;
+				}
+			});
+			new videoHandler().beginClosedCaptioning();
+		}
+		
+		$( document ).ready(function() {		
+			$( "#overlay" ).hide();
+			$( "#overlay2" ).hide();
+			
+			var VH = new videoHandler();
+			
+			$( "#go" ).click(function() {
+				VH.execute($('#video-url').val());
+			});
+			$( "#example" ).click(function() {
+				VH.execute("https://www.youtube.com/watch?v=cse5cCGuHmE");
+			});
+		});
+	</script>
+	<nav class="navbar navbar-default">
+	<div class="navbar-header">
+		<div class="col-xs-1 col-sm-1 col-md-1 col-lg-1">
+		</div>
+		<div id="input-holder" align='center' class="col-xs-10 col-sm-10 col-md-10 col-lg-10">
+			<div class="input-group">
+				<input id="video-url" type="text" class="form-control" placeholder="Enter a Youtube video with English Closed Captioning *Works Best On Google Chrome*">
+				<div class="input-group-btn">
+					<button id="go" type="button" class="btn btn-success">Go</button>
+					<button id="example" type="button" class="btn btn-primary">Example</button>
+					<a href="https://github.com/AtheistOfFail/Youtube2Emotion"><button id="github" type="button" class="btn btn-info">Get it on Github</button></a>
+				</div>
+			</div>
+		</div>
+		<div class="col-xs-1 col-sm-1 col-md-1 col-lg-1">
+		</div>
+	</div>
+	</nav>
+	<div id="holder" class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+		<div id="video-holder" align="center">
+		</div>
+		<div id="overlay">
+			<div id="sentiment" style="width:100%; height:30%"></div>
+			<div id="political">
+				<div id="libertarian" style="width:100%; height:15%">
+				</div>
+				<div id="liberal" style="width:100%; height:15%">
+				</div>
+				<div id="green" style="width:100%; height:15%">
+				</div>
+				<div id="conservative" style="width:100%; height:15%">
+				</div>
+			</div>
+			<div id="text_tags" style="width:100%; height:10%"></div>
+		</div>
+		<div id="overlay2">
+			<p id="caption" style="width:100%; height:100%; font-size:20px" align="center">
+			</p>
+		</div>
+		<div id="achieved" class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+			<div class="col-xs-12 col-sm-12 col-md-12 col-lg-12" align="center">
+				<p style="font-size:20px" align="center"> Achieved With: 
+				</p>
+				<a href="https://indico.io/"><img src="https://s3.amazonaws.com/mashape-production-logos/apis/548b3787e4b0415c068d3f56_medium"  class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="jQuery"/></a>
+				<img src="http://www.alex-arriaga.com/wp-content/uploads/2014/12/javascript-logo.png" class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="Javascript"/>
+				<a href="http://getbootstrap.com/"><img src="http://widux.com/img/icon-bootstrap.png" class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="Bootstrap"/></a>
+				<a href="https://jquery.com/"><img src="http://md.x10.mx/mark/clanky_img/jqueryImg.jpg" class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="jQuery"/></a>
+				<a href="https://www.youtube.com/"><img src="http://icons.iconarchive.com/icons/dakirby309/windows-8-metro/128/Web-YouTube-Metro-icon.png" class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="Youtube"/></a>
+				<a href="http://justgage.com/"><img src="http://www.developpez.com/telecharger/logo/id/2890" class="img-responsive inline-block col-xs-2 col-sm-2 col-md-2 col-lg-2" alt="JustGage"/></a>
+			</div>
+			<p style="font-size:20px" align="center"> Some Code By: Lazaro Herrera
+				<a href="http://www.linkedin.com/in/lazaroherrera"><img src="https://media.licdn.com/mpr/mpr/shrinknp_400_400/p/2/000/223/19b/2ec486c.jpg" width=100 height=100 alt="Me"\></a>
+			</p>
+		</div>
+	</div>
+</body>
